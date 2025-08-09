@@ -2,37 +2,30 @@
 (() => {
   let settings = {
     enabled: true,
-    replacement: "",
-    words: [],
-    matchWholeWords: true,
-    caseInsensitive: true
+    replacementGroups: []
   }
 
   // Build a combined RegExp from the words list
   const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-  const buildRegex = () => {
-    if (!settings.words || settings.words.length === 0) return null
-    const parts = settings.words
+  const buildRegex = (group) => {
+    if (!group.words || group.words.length === 0) return null
+    const parts = group.words
       .map(w => w.trim())
       .filter(Boolean)
       .map(escapeRegex)
 
     if (parts.length === 0) return null
 
-    const group = parts.join("|")
-    const flags = settings.caseInsensitive ? "gi" : "g"
+    const pattern = parts.join("|")
+    const flags = group.caseInsensitive ? "gi" : "g"
 
-    // Whole word means wrap with \b where sensible.
-    // For phrases with spaces/punctuation, \b might be too strict—so we only add \b
-    // when the part looks like a single alphanumeric "word".
-    // To keep it simple across the union, we allow either strict or loose:
-    return settings.matchWholeWords
-      ? new RegExp(`\\b(?:${group})\\b`, flags)
-      : new RegExp(`(?:${group})`, flags)
+    return group.matchWholeWords
+      ? new RegExp(`\\b(?:${pattern})\\b`, flags)
+      : new RegExp(`(?:${pattern})`, flags)
   }
 
-  let compiled = null
+  let compiledGroups = []
 
   // Preserve case helper: adapt replacement to match original token case.
   const preserveCase = (from, to) => {
@@ -54,26 +47,37 @@
 
   const shouldSkipNode = (node) => {
     if (!node) return true
-    // Don’t mutate in editable fields or these tags
+    // Don't mutate in editable fields or these tags
     if (node.isContentEditable) return true
     const tag = node.nodeName
     return tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "IFRAME"
   }
 
   const replaceInTextNode = (textNode) => {
-    if (!compiled) return
-    const originalText = textNode.nodeValue
-    if (!originalText || !compiled.test(originalText)) return
-
-    // Reset lastIndex because we used test() above with /g
-    compiled.lastIndex = 0
-
-    const replaced = originalText.replace(compiled, (match) => {
-      return preserveCase(match, settings.replacement)
-    })
-
-    if (replaced !== originalText) {
-      textNode.nodeValue = replaced
+    if (!compiledGroups || compiledGroups.length === 0) return
+    
+    let currentText = textNode.nodeValue
+    if (!currentText) return
+    
+    let hasChanges = false
+    
+    // Apply each replacement group in order
+    for (const group of compiledGroups) {
+      if (!group.regex) continue
+      
+      if (group.regex.test(currentText)) {
+        // Reset lastIndex because we used test() above with /g
+        group.regex.lastIndex = 0
+        
+        currentText = currentText.replace(group.regex, (match) => {
+          hasChanges = true
+          return preserveCase(match, group.replacement)
+        })
+      }
+    }
+    
+    if (hasChanges) {
+      textNode.nodeValue = currentText
     }
   }
 
@@ -105,7 +109,7 @@
   const startObserving = () => {
     if (observer) observer.disconnect()
     observer = new MutationObserver((mutations) => {
-      if (!settings.enabled || !compiled) return
+      if (!settings.enabled || !compiledGroups || compiledGroups.length === 0) return
 
       for (const m of mutations) {
         if (m.type === "characterData" && m.target.nodeType === Node.TEXT_NODE) {
@@ -134,29 +138,61 @@
   }
 
   const applyAll = () => {
-    if (!settings.enabled || !compiled) return
+    if (!settings.enabled || !compiledGroups || compiledGroups.length === 0) return
     walkAndReplace(document.documentElement || document.body)
   }
 
   const rebuild = () => {
-    compiled = buildRegex()
+    compiledGroups = []
+    
+    if (settings.replacementGroups && settings.replacementGroups.length > 0) {
+      for (const group of settings.replacementGroups) {
+        const regex = buildRegex(group)
+        if (regex) {
+          compiledGroups.push({
+            regex,
+            replacement: group.replacement || 'REDACTED'
+          })
+        }
+      }
+    }
   }
 
   const loadSettings = async () => {
-    const s = await chrome.storage.sync.get([
-      "enabled",
-      "replacement",
-      "words",
-      "matchWholeWords",
-      "caseInsensitive"
-    ])
-    settings = {
-      enabled: s.enabled ?? true,
-      replacement: s.replacement ?? "REDACTED",
-      words: Array.isArray(s.words) ? s.words : [],
-      matchWholeWords: s.matchWholeWords ?? true,
-      caseInsensitive: s.caseInsensitive ?? true
+    const s = await chrome.storage.sync.get(['enabled', 'replacementGroups'])
+    
+    // Handle new format
+    if (s.replacementGroups !== undefined) {
+      settings = {
+        enabled: s.enabled ?? true,
+        replacementGroups: s.replacementGroups || []
+      }
+    } else {
+      // Handle legacy format
+      const legacy = await chrome.storage.sync.get([
+        "enabled",
+        "replacement",
+        "words",
+        "matchWholeWords",
+        "caseInsensitive"
+      ])
+      
+      settings = {
+        enabled: legacy.enabled ?? true,
+        replacementGroups: []
+      }
+      
+      // Convert legacy settings to new format
+      if (legacy.words && legacy.words.length > 0) {
+        settings.replacementGroups = [{
+          replacement: legacy.replacement || 'REDACTED',
+          words: legacy.words,
+          matchWholeWords: legacy.matchWholeWords ?? true,
+          caseInsensitive: legacy.caseInsensitive ?? true
+        }]
+      }
     }
+    
     rebuild()
   }
 
@@ -172,22 +208,18 @@
       else startObserving()
       needReapply = true
     }
-    if ("replacement" in changes) {
-      settings.replacement = changes.replacement.newValue
-      needReapply = true
-    }
-    if ("words" in changes) {
-      settings.words = changes.words.newValue || []
+    
+    if ("replacementGroups" in changes) {
+      settings.replacementGroups = changes.replacementGroups.newValue || []
       needRebuild = true
       needReapply = true
     }
-    if ("matchWholeWords" in changes) {
-      settings.matchWholeWords = changes.matchWholeWords.newValue
-      needRebuild = true
-      needReapply = true
-    }
-    if ("caseInsensitive" in changes) {
-      settings.caseInsensitive = changes.caseInsensitive.newValue
+    
+    // Handle legacy format changes (for backward compatibility)
+    if ("replacement" in changes || "words" in changes || 
+        "matchWholeWords" in changes || "caseInsensitive" in changes) {
+      // Reload settings to handle legacy format
+      await loadSettings()
       needRebuild = true
       needReapply = true
     }
