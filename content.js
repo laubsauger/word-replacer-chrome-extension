@@ -8,24 +8,49 @@
   // Build a combined RegExp from the words list
   const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-  const buildRegex = (group) => {
-    if (!group.words || group.words.length === 0) return null
-    const parts = group.words
-      .map(w => w.trim())
-      .filter(Boolean)
-      .map(escapeRegex)
-
-    if (parts.length === 0) return null
-
-    const pattern = parts.join("|")
-    const flags = group.caseInsensitive ? "gi" : "g"
-
-    return group.matchWholeWords
-      ? new RegExp(`\\b(?:${pattern})\\b`, flags)
-      : new RegExp(`(?:${pattern})`, flags)
+  // Cache for text nodes we've already processed
+  const processedNodes = new WeakSet()
+  
+  // Combine all groups into a single regex for better performance
+  const buildCombinedRegex = () => {
+    if (!settings.replacementGroups || settings.replacementGroups.length === 0) return null
+    
+    const groupMappings = []
+    const allPatterns = []
+    
+    for (const group of settings.replacementGroups) {
+      if (!group.words || group.words.length === 0) continue
+      
+      const escapedWords = group.words
+        .map(w => w.trim())
+        .filter(Boolean)
+        .map(escapeRegex)
+      
+      if (escapedWords.length === 0) continue
+      
+      // Create a unique pattern for this group
+      for (const word of escapedWords) {
+        const pattern = group.matchWholeWords ? `\\b${word}\\b` : word
+        allPatterns.push(`(${pattern})`)
+        groupMappings.push({
+          replacement: group.replacement || 'Cocaine',
+          caseInsensitive: group.caseInsensitive
+        })
+      }
+    }
+    
+    if (allPatterns.length === 0) return null
+    
+    // Create a single regex with all patterns
+    // Use 'gi' flags for the combined regex, we'll handle case sensitivity per group
+    const combinedPattern = allPatterns.join('|')
+    return {
+      regex: new RegExp(combinedPattern, 'gi'),
+      mappings: groupMappings
+    }
   }
 
-  let compiledGroups = []
+  let compiledRegex = null
 
   // Preserve case helper: adapt replacement to match original token case.
   const preserveCase = (from, to) => {
@@ -54,35 +79,94 @@
   }
 
   const replaceInTextNode = (textNode) => {
-    if (!compiledGroups || compiledGroups.length === 0) return
+    if (!compiledRegex || !compiledRegex.regex) return
     
-    let currentText = textNode.nodeValue
-    if (!currentText) return
+    // Skip if already processed and content hasn't changed
+    if (processedNodes.has(textNode)) return
     
-    let hasChanges = false
+    const originalText = textNode.nodeValue
+    if (!originalText || originalText.length < 2) return // Skip very short text
     
-    // Apply each replacement group in order
-    for (const group of compiledGroups) {
-      if (!group.regex) continue
+    // Quick check if text might contain any of our patterns
+    if (!compiledRegex.regex.test(originalText)) return
+    
+    // Reset lastIndex for reuse
+    compiledRegex.regex.lastIndex = 0
+    
+    const replaced = originalText.replace(compiledRegex.regex, (match, ...groups) => {
+      // Find which group matched
+      const groupIndex = groups.findIndex((g, i) => i < compiledRegex.mappings.length && g !== undefined)
+      if (groupIndex === -1) return match
       
-      if (group.regex.test(currentText)) {
-        // Reset lastIndex because we used test() above with /g
-        group.regex.lastIndex = 0
-        
-        currentText = currentText.replace(group.regex, (match) => {
-          hasChanges = true
-          return preserveCase(match, group.replacement)
-        })
+      const mapping = compiledRegex.mappings[groupIndex]
+      
+      // Check case sensitivity for this specific mapping
+      if (!mapping.caseInsensitive) {
+        // For case-sensitive matches, verify the exact match
+        const pattern = groups[groupIndex]
+        if (pattern !== match) return match
       }
-    }
+      
+      return preserveCase(match, mapping.replacement)
+    })
     
-    if (hasChanges) {
-      textNode.nodeValue = currentText
+    if (replaced !== originalText) {
+      textNode.nodeValue = replaced
+      processedNodes.add(textNode)
     }
   }
 
+  // Batch process mutations for better performance
+  let pendingMutations = []
+  let processingTimeout = null
+  
+  const processPendingMutations = () => {
+    if (pendingMutations.length === 0) return
+    
+    const nodesToProcess = new Set()
+    
+    for (const nodes of pendingMutations) {
+      for (const node of nodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          nodesToProcess.add(node)
+        } else if (node.nodeType === Node.ELEMENT_NODE && !shouldSkipNode(node)) {
+          // Use a more efficient tree walker
+          const walker = document.createTreeWalker(
+            node,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode: (n) => {
+                const p = n.parentNode
+                if (!p) return NodeFilter.FILTER_REJECT
+                if (shouldSkipNode(p)) return NodeFilter.FILTER_REJECT
+                if (p.nodeName === "INPUT" || p.nodeName === "TEXTAREA") return NodeFilter.FILTER_REJECT
+                return NodeFilter.FILTER_ACCEPT
+              }
+            }
+          )
+          
+          let textNode
+          while ((textNode = walker.nextNode())) {
+            nodesToProcess.add(textNode)
+          }
+        }
+      }
+    }
+    
+    // Process all collected text nodes
+    for (const node of nodesToProcess) {
+      replaceInTextNode(node)
+    }
+    
+    pendingMutations = []
+    processingTimeout = null
+  }
+  
   const walkAndReplace = (root) => {
     if (shouldSkipNode(root)) return
+    
+    // Collect all text nodes first, then process in batch
+    const textNodes = []
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_TEXT,
@@ -91,7 +175,6 @@
           const p = n.parentNode
           if (!p) return NodeFilter.FILTER_REJECT
           if (shouldSkipNode(p)) return NodeFilter.FILTER_REJECT
-          // Skip inputs/textareas
           if (p.nodeName === "INPUT" || p.nodeName === "TEXTAREA") return NodeFilter.FILTER_REJECT
           return NodeFilter.FILTER_ACCEPT
         }
@@ -100,7 +183,13 @@
 
     let node
     while ((node = walker.nextNode())) {
-      replaceInTextNode(node)
+      textNodes.push(node)
+    }
+    
+    // Process in batches for better performance
+    for (let i = 0; i < textNodes.length; i += 100) {
+      const batch = textNodes.slice(i, i + 100)
+      batch.forEach(replaceInTextNode)
     }
   }
 
@@ -108,21 +197,28 @@
   let observer = null
   const startObserving = () => {
     if (observer) observer.disconnect()
+    
     observer = new MutationObserver((mutations) => {
-      if (!settings.enabled || !compiledGroups || compiledGroups.length === 0) return
-
+      if (!settings.enabled || !compiledRegex) return
+      
+      const nodesToQueue = []
+      
       for (const m of mutations) {
         if (m.type === "characterData" && m.target.nodeType === Node.TEXT_NODE) {
-          replaceInTextNode(m.target)
-        } else if (m.type === "childList") {
-          m.addedNodes.forEach((n) => {
-            if (n.nodeType === Node.TEXT_NODE) {
-              replaceInTextNode(n)
-            } else if (n.nodeType === Node.ELEMENT_NODE && !shouldSkipNode(n)) {
-              walkAndReplace(n)
-            }
-          })
+          // Remove from processed cache since content changed
+          processedNodes.delete(m.target)
+          nodesToQueue.push(m.target)
+        } else if (m.type === "childList" && m.addedNodes.length > 0) {
+          nodesToQueue.push(...m.addedNodes)
         }
+      }
+      
+      if (nodesToQueue.length > 0) {
+        pendingMutations.push(nodesToQueue)
+        
+        // Debounce processing for better performance
+        if (processingTimeout) clearTimeout(processingTimeout)
+        processingTimeout = setTimeout(processPendingMutations, 10)
       }
     })
 
@@ -135,27 +231,24 @@
 
   const stopObserving = () => {
     if (observer) observer.disconnect()
+    if (processingTimeout) {
+      clearTimeout(processingTimeout)
+      processingTimeout = null
+    }
   }
 
   const applyAll = () => {
-    if (!settings.enabled || !compiledGroups || compiledGroups.length === 0) return
+    if (!settings.enabled || !compiledRegex) return
+    
+    // Clear processed cache when doing full apply
+    processedNodes.clear()
     walkAndReplace(document.documentElement || document.body)
   }
 
   const rebuild = () => {
-    compiledGroups = []
-    
-    if (settings.replacementGroups && settings.replacementGroups.length > 0) {
-      for (const group of settings.replacementGroups) {
-        const regex = buildRegex(group)
-        if (regex) {
-          compiledGroups.push({
-            regex,
-            replacement: group.replacement || 'REDACTED'
-          })
-        }
-      }
-    }
+    // Clear cache when rebuilding
+    processedNodes.clear()
+    compiledRegex = buildCombinedRegex()
   }
 
   const loadSettings = async () => {
@@ -185,7 +278,7 @@
       // Convert legacy settings to new format
       if (legacy.words && legacy.words.length > 0) {
         settings.replacementGroups = [{
-          replacement: legacy.replacement || 'REDACTED',
+          replacement: legacy.replacement || 'Cocaine',
           words: legacy.words,
           matchWholeWords: legacy.matchWholeWords ?? true,
           caseInsensitive: legacy.caseInsensitive ?? true
@@ -233,7 +326,10 @@
     await loadSettings()
     if (settings.enabled) {
       startObserving()
-      applyAll()
+      // Delay initial application slightly to avoid blocking page load
+      requestIdleCallback ? 
+        requestIdleCallback(() => applyAll(), { timeout: 1000 }) :
+        setTimeout(applyAll, 100)
     }
   })()
 })()

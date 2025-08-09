@@ -1,5 +1,69 @@
 let groupCounter = 0;
 
+const defaultConfig = {
+  replacement: "Cocaine",
+  words: [
+    "Artificial Intelligence",
+    "Artificial General Intelligence",
+    "Artificial Super Intelligence",
+    "AI",
+    "AGI",
+    "ASI",
+    "LLMs",
+    "Machine Learning",
+    "ML",
+    "GPT-5",
+    "GPT-4o",
+    "GPT-4o-mini",
+    "GPT-o3",
+    "Deep Learning",
+    "Neural Network",
+    "NLP",
+    "Natural Language Processing",
+    "Language Model",
+    "Large Language Model",
+    "LLM",
+    "Generative AI",
+    "Foundation Model",
+    "Transformer",
+    "Multimodal Model",
+    "GPT",
+    "ChatGPT",
+    "Claude",
+    "Cursor",
+    "Gemini",
+    "LLaMA",
+    "Mistral",
+    "Falcon",
+    "Bot",
+    "Chatbot",
+    "AIBot",
+    "SmartBot",
+    "AIAssistant",
+    "Agent",
+    "DigitalBrain",
+    "MachineMind",
+    "Algo",
+    "Model",
+    "AIOverlord",
+    "Skynet",
+    "ConversationalAI",
+    "VirtualAssistant",
+    "Copilot",
+    "AutonomousAgent",
+    "PromptEngine",
+    "TextGenerator",
+    "AIWriter",
+    "AICoder",
+    "AITutor",
+    "Grok",
+    "Veo 2",
+    "Veo 3"
+  ],
+  matchWholeWords: true,
+  caseInsensitive: false
+};
+
 const createGroupElement = (groupData = null, groupId = null) => {
   const id = groupId !== null ? groupId : groupCounter++;
   const groupDiv = document.createElement('div');
@@ -42,8 +106,11 @@ lorem ipsum"></textarea>
     groupDiv.querySelector('.matchWholeWords').checked = groupData.matchWholeWords ?? true;
     groupDiv.querySelector('.caseInsensitive').checked = groupData.caseInsensitive ?? true;
   } else {
-    groupDiv.querySelector('.matchWholeWords').checked = true;
-    groupDiv.querySelector('.caseInsensitive').checked = true;
+    // Use fun defaults for new groups
+    groupDiv.querySelector('.replacement').value = defaultConfig.replacement
+    groupDiv.querySelector('.words').value = defaultConfig.words.join('\n')
+    groupDiv.querySelector('.matchWholeWords').checked = defaultConfig.matchWholeWords
+    groupDiv.querySelector('.caseInsensitive').checked = defaultConfig.caseInsensitive;
   }
   
   groupDiv.querySelector('.remove-group').addEventListener('click', () => {
@@ -89,7 +156,7 @@ const load = async () => {
       }, 0));
       groupCounter = 1;
     } else {
-      // Create default empty group
+      // Create default group with fun defaults
       groupsContainer.appendChild(createGroupElement(null, 0));
       groupCounter = 1;
     }
