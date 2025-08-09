@@ -1,5 +1,9 @@
 // content.js
 (() => {
+  'use strict';
+  
+  // Wrap everything in try-catch for safety
+  try {
   let settings = {
     enabled: true,
     replacementGroups: []
@@ -9,44 +13,56 @@
   const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
   // Cache for text nodes we've already processed
-  const processedNodes = new WeakSet()
+  let processedNodes = new WeakSet()
   
   // Combine all groups into a single regex for better performance
   const buildCombinedRegex = () => {
-    if (!settings.replacementGroups || settings.replacementGroups.length === 0) return null
-    
-    const groupMappings = []
-    const allPatterns = []
-    
-    for (const group of settings.replacementGroups) {
-      if (!group.words || group.words.length === 0) continue
+    try {
+      if (!settings.replacementGroups || settings.replacementGroups.length === 0) return null
       
-      const escapedWords = group.words
-        .map(w => w.trim())
-        .filter(Boolean)
-        .map(escapeRegex)
+      const groupMappings = []
+      const allPatterns = []
       
-      if (escapedWords.length === 0) continue
-      
-      // Create a unique pattern for this group
-      for (const word of escapedWords) {
-        const pattern = group.matchWholeWords ? `\\b${word}\\b` : word
-        allPatterns.push(`(${pattern})`)
-        groupMappings.push({
-          replacement: group.replacement || 'Cocaine',
-          caseInsensitive: group.caseInsensitive
-        })
+      for (const group of settings.replacementGroups) {
+        if (!group || !group.words || group.words.length === 0) continue
+        
+        const escapedWords = group.words
+          .map(w => w ? w.trim() : '')
+          .filter(Boolean)
+          .map(escapeRegex)
+        
+        if (escapedWords.length === 0) continue
+        
+        // Create a unique pattern for this group
+        for (const word of escapedWords) {
+          const pattern = group.matchWholeWords ? `\\b${word}\\b` : word
+          allPatterns.push(`(${pattern})`)
+          groupMappings.push({
+            replacement: group.replacement || 'Cocaine',
+            caseInsensitive: group.caseInsensitive
+          })
+        }
       }
-    }
-    
-    if (allPatterns.length === 0) return null
-    
-    // Create a single regex with all patterns
-    // Use 'gi' flags for the combined regex, we'll handle case sensitivity per group
-    const combinedPattern = allPatterns.join('|')
-    return {
-      regex: new RegExp(combinedPattern, 'gi'),
-      mappings: groupMappings
+      
+      if (allPatterns.length === 0) return null
+      
+      // Limit pattern size to avoid regex complexity issues
+      if (allPatterns.length > 500) {
+        console.warn('Word Replacer: Too many patterns, limiting to first 500')
+        allPatterns.length = 500
+        groupMappings.length = 500
+      }
+      
+      // Create a single regex with all patterns
+      // Use 'gi' flags for the combined regex, we'll handle case sensitivity per group
+      const combinedPattern = allPatterns.join('|')
+      return {
+        regex: new RegExp(combinedPattern, 'gi'),
+        mappings: groupMappings
+      }
+    } catch (error) {
+      console.error('Word Replacer: Failed to build regex', error)
+      return null
     }
   }
 
@@ -79,40 +95,46 @@
   }
 
   const replaceInTextNode = (textNode) => {
-    if (!compiledRegex || !compiledRegex.regex) return
-    
-    // Skip if already processed and content hasn't changed
-    if (processedNodes.has(textNode)) return
-    
-    const originalText = textNode.nodeValue
-    if (!originalText || originalText.length < 2) return // Skip very short text
-    
-    // Quick check if text might contain any of our patterns
-    if (!compiledRegex.regex.test(originalText)) return
-    
-    // Reset lastIndex for reuse
-    compiledRegex.regex.lastIndex = 0
-    
-    const replaced = originalText.replace(compiledRegex.regex, (match, ...groups) => {
-      // Find which group matched
-      const groupIndex = groups.findIndex((g, i) => i < compiledRegex.mappings.length && g !== undefined)
-      if (groupIndex === -1) return match
+    try {
+      if (!compiledRegex || !compiledRegex.regex) return
       
-      const mapping = compiledRegex.mappings[groupIndex]
+      // Skip if already processed and content hasn't changed
+      if (processedNodes.has(textNode)) return
       
-      // Check case sensitivity for this specific mapping
-      if (!mapping.caseInsensitive) {
-        // For case-sensitive matches, verify the exact match
-        const pattern = groups[groupIndex]
-        if (pattern !== match) return match
+      const originalText = textNode.nodeValue
+      if (!originalText || originalText.length < 2) return // Skip very short text
+      
+      // Quick check if text might contain any of our patterns
+      if (!compiledRegex.regex.test(originalText)) return
+      
+      // Reset lastIndex for reuse
+      compiledRegex.regex.lastIndex = 0
+      
+      const replaced = originalText.replace(compiledRegex.regex, (match, ...groups) => {
+        // Find which group matched
+        const groupIndex = groups.findIndex((g, i) => i < compiledRegex.mappings.length && g !== undefined)
+        if (groupIndex === -1) return match
+        
+        const mapping = compiledRegex.mappings[groupIndex]
+        if (!mapping) return match
+        
+        // Check case sensitivity for this specific mapping
+        if (!mapping.caseInsensitive) {
+          // For case-sensitive matches, verify the exact match
+          const pattern = groups[groupIndex]
+          if (pattern !== match) return match
+        }
+        
+        return preserveCase(match, mapping.replacement)
+      })
+      
+      if (replaced !== originalText) {
+        textNode.nodeValue = replaced
+        processedNodes.add(textNode)
       }
-      
-      return preserveCase(match, mapping.replacement)
-    })
-    
-    if (replaced !== originalText) {
-      textNode.nodeValue = replaced
-      processedNodes.add(textNode)
+    } catch (error) {
+      // Silently fail for individual nodes to avoid breaking the entire page
+      console.debug('Word Replacer: Node processing error', error)
     }
   }
 
@@ -240,14 +262,14 @@
   const applyAll = () => {
     if (!settings.enabled || !compiledRegex) return
     
-    // Clear processed cache when doing full apply
-    processedNodes.clear()
+    // Clear processed cache when doing full apply (recreate WeakSet)
+    processedNodes = new WeakSet()
     walkAndReplace(document.documentElement || document.body)
   }
 
   const rebuild = () => {
-    // Clear cache when rebuilding
-    processedNodes.clear()
+    // Clear cache when rebuilding (recreate WeakSet)
+    processedNodes = new WeakSet()
     compiledRegex = buildCombinedRegex()
   }
 
@@ -323,13 +345,23 @@
 
   // Init
   (async () => {
-    await loadSettings()
-    if (settings.enabled) {
-      startObserving()
-      // Delay initial application slightly to avoid blocking page load
-      requestIdleCallback ? 
-        requestIdleCallback(() => applyAll(), { timeout: 1000 }) :
-        setTimeout(applyAll, 100)
+    try {
+      await loadSettings()
+      if (settings.enabled) {
+        startObserving()
+        // Delay initial application slightly to avoid blocking page load
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => applyAll(), { timeout: 1000 })
+        } else {
+          setTimeout(applyAll, 100)
+        }
+      }
+    } catch (error) {
+      console.error('Word Replacer Extension: Initialization error:', error)
     }
   })()
+  
+  } catch (error) {
+    console.error('Word Replacer Extension: Critical error:', error)
+  }
 })()
