@@ -71,7 +71,13 @@
   // Preserve case helper: adapt replacement to match original token case.
   const preserveCase = (from, to) => {
     if (!from) return to
-    // ALL CAPS
+    
+    // For short acronyms (2 chars or less like AI, ML), always use configured replacement as-is
+    if (from.length <= 2) {
+      return to
+    }
+    
+    // ALL CAPS (only for longer words)
     if (from.toUpperCase() === from && /[A-Z]/.test(from)) {
       return to.toUpperCase()
     }
