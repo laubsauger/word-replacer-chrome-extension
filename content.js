@@ -94,15 +94,31 @@
 
   const shouldSkipNode = (node) => {
     if (!node) return true
-    // Don't mutate in editable fields or these tags
+    
+    // Don't mutate in editable fields
     if (node.isContentEditable) return true
+    
+    // Check if node is inside an input or textarea
+    let parent = node.parentNode
+    while (parent) {
+      if (parent.isContentEditable) return true
+      const parentTag = parent.nodeName
+      if (parentTag === "INPUT" || parentTag === "TEXTAREA" || parentTag === "SELECT") return true
+      parent = parent.parentNode
+    }
+    
     const tag = node.nodeName
-    return tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "IFRAME"
+    return tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || 
+           tag === "IFRAME" || tag === "INPUT" || tag === "TEXTAREA" || 
+           tag === "SELECT" || tag === "OPTION"
   }
 
   const replaceInTextNode = (textNode) => {
     try {
       if (!compiledRegex || !compiledRegex.regex) return
+      
+      // Double-check we're not in an editable context
+      if (shouldSkipNode(textNode.parentNode)) return
       
       // Skip if already processed and content hasn't changed
       if (processedNodes.has(textNode)) return
@@ -167,7 +183,6 @@
                 const p = n.parentNode
                 if (!p) return NodeFilter.FILTER_REJECT
                 if (shouldSkipNode(p)) return NodeFilter.FILTER_REJECT
-                if (p.nodeName === "INPUT" || p.nodeName === "TEXTAREA") return NodeFilter.FILTER_REJECT
                 return NodeFilter.FILTER_ACCEPT
               }
             }
@@ -203,7 +218,6 @@
           const p = n.parentNode
           if (!p) return NodeFilter.FILTER_REJECT
           if (shouldSkipNode(p)) return NodeFilter.FILTER_REJECT
-          if (p.nodeName === "INPUT" || p.nodeName === "TEXTAREA") return NodeFilter.FILTER_REJECT
           return NodeFilter.FILTER_ACCEPT
         }
       }
