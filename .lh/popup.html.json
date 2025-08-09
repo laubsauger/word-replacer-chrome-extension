@@ -1,0 +1,18 @@
+{
+    "sourceFile": "popup.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1754726185907,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1754726185907,
+            "name": "Commit-0",
+            "content": "<!doctype html>\n<html lang=\"en\">\n\n<head>\n  <meta charset=\"utf-8\" />\n  <title>Word Replacer</title>\n  <link rel=\"stylesheet\" href=\"popup.css\" />\n</head>\n\n<body>\n  <main>\n    <label class=\"row\">\n      <input type=\"checkbox\" id=\"enabled\" />\n      <span>Enable on all sites</span>\n    </label>\n\n    <div class=\"row\">\n      <button id=\"openOptions\">Open Options</button>\n    </div>\n  </main>\n  <script src=\"popup.js\"></script>\n</body>\n\n</html>"
+        }
+    ]
+}

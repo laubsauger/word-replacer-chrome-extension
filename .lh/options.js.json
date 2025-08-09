@@ -1,0 +1,18 @@
+{
+    "sourceFile": "options.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1754726234929,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1754726234929,
+            "name": "Commit-0",
+            "content": "const els = {\n  enabled: document.getElementById(\"enabled\"),\n  replacement: document.getElementById(\"replacement\"),\n  words: document.getElementById(\"words\"),\n  matchWholeWords: document.getElementById(\"matchWholeWords\"),\n  caseInsensitive: document.getElementById(\"caseInsensitive\"),\n  save: document.getElementById(\"save\"),\n  status: document.getElementById(\"status\")\n}\n\nconst load = async () => {\n  const s = await chrome.storage.sync.get([\n    \"enabled\",\n    \"replacement\",\n    \"words\",\n    \"matchWholeWords\",\n    \"caseInsensitive\"\n  ])\n\n  els.enabled.checked = s.enabled ?? true\n  els.replacement.value = s.replacement ?? \"REDACTED\"\n  els.words.value = Array.isArray(s.words) ? s.words.join(\"\\n\") : \"\"\n  els.matchWholeWords.checked = s.matchWholeWords ?? true\n  els.caseInsensitive.checked = s.caseInsensitive ?? true\n}\n\nconst save = async () => {\n  const words = els.words.value\n    .split(\"\\n\")\n    .map(s => s.trim())\n    .filter(Boolean)\n\n  await chrome.storage.sync.set({\n    enabled: els.enabled.checked,\n    replacement: els.replacement.value || \"\",\n    words,\n    matchWholeWords: els.matchWholeWords.checked,\n    caseInsensitive: els.caseInsensitive.checked\n  })\n\n  els.status.textContent = \"Saved!\"\n  setTimeout(() => (els.status.textContent = \"\"), 1200)\n}\n\ndocument.addEventListener(\"DOMContentLoaded\", load)\nels.save.addEventListener(\"click\", save)\n"
+        }
+    ]
+}

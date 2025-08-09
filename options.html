@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Word Replacer – Options</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+
+<body>
+  <main>
+    <h1>Word Replacer – Options</h1>
+
+    <section>
+      <label class="row">
+        <input type="checkbox" id="enabled" />
+        <span>Enable on all sites</span>
+      </label>
+    </section>
+
+    <div id="replacementGroups">
+      <div class="replacement-group" data-group-id="0">
+        <div class="group-header">
+          <h3>Replacement Group 1</h3>
+          <button class="remove-group" title="Remove this group">×</button>
+        </div>
+        
+        <section>
+          <label>Replacement word/phrase</label>
+          <input class="replacement" type="text" placeholder="e.g. banana" />
+        </section>
+
+        <section>
+          <label>Words/phrases to replace (one per line)</label>
+          <textarea class="words" rows="5" placeholder="foo
+bar
+lorem ipsum"></textarea>
+        </section>
+
+        <section class="row">
+          <label class="row">
+            <input type="checkbox" class="matchWholeWords" />
+            <span>Match whole words only</span>
+          </label>
+          <label class="row">
+            <input type="checkbox" class="caseInsensitive" />
+            <span>Case insensitive</span>
+          </label>
+        </section>
+      </div>
+    </div>
+
+    <button id="addGroup" class="add-group-btn">+ Add Replacement Group</button>
+
+    <footer>
+      <button id="save">Save</button>
+      <span id="status" aria-live="polite"></span>
+    </footer>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+
+</html>

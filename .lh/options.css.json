@@ -1,0 +1,18 @@
+{
+    "sourceFile": "options.css",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1754726268970,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1754726268970,
+            "name": "Commit-0",
+            "content": "body {\n  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;\n  margin: 0;\n  padding: 0;\n  background: #fafafa;\n  color: #222;\n}\n\nmain {\n  max-width: 720px;\n  margin: 24px auto;\n  background: #fff;\n  padding: 24px;\n  border-radius: 16px;\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);\n}\n\nh1 {\n  margin-top: 0;\n}\n\nsection {\n  margin: 16px 0 12px;\n}\n\nlabel {\n  display: block;\n  font-weight: 600;\n  margin-bottom: 6px;\n}\n\n.row {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n}\n\ninput[type=\"text\"],\ntextarea {\n  width: 100%;\n  padding: 10px 12px;\n  border: 1px solid #ddd;\n  border-radius: 10px;\n  font-size: 14px;\n  background: #fff;\n}\n\nfooter {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  margin-top: 18px;\n}\n\nbutton#save {\n  padding: 8px 14px;\n  border-radius: 10px;\n  border: 1px solid #ddd;\n  background: #fff;\n  cursor: pointer;\n  font-weight: 600;\n}\n\nbutton#save:hover {\n  background: #f5f5f5;\n}\n\n#status {\n  min-height: 1em;\n  color: #0a7a0a;\n  font-weight: 600;\n}"
+        }
+    ]
+}

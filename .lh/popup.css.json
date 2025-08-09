@@ -1,0 +1,18 @@
+{
+    "sourceFile": "popup.css",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1754726201395,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1754726201395,
+            "name": "Commit-0",
+            "content": "body {\n  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;\n  margin: 0;\n  padding: 10px;\n  width: 220px;\n}\n\n.row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin: 10px 0;\n}\n\nbutton {\n  padding: 6px 10px;\n  border: 1px solid #ddd;\n  border-radius: 8px;\n  background: #fff;\n  cursor: pointer;\n}\n\nbutton:hover {\n  background: #f6f6f6;\n}"
+        }
+    ]
+}
